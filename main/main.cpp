@@ -767,7 +767,7 @@ void app_main() {
 //
 	    xTaskCreate(control_loop_task, "Control_Loop", 2048, NULL, 5, NULL);
 
-	    xTaskCreate(servo_control, "Servo control", 2048, NULL, 5, NULL);
+	    xTaskCreate(servo_control, "Servo_control", 2048, NULL, 5, NULL);
 	    printf("TEST");
 
 
@@ -833,7 +833,7 @@ void subparser(const char *data, char** endptr){
     setSpeedS(Velx,Vely);
     printf("%d",Velx);
     break;
-    case 'H': homingSequence(); break;
+    case 'H': homingSequence(); *endptr[0]='\0'; break;
     case 'S': break;
     default:  printf("Unknown Command");*endptr[0]='\0';break;
 
@@ -914,7 +914,20 @@ void servo_control(void *arg)
 
 void homingSequence(){
 
+int8_t counter =0;
 
+	while(counter<10){
+
+		position_x = 10;
+		target_position_x= 0;
+		vTaskDelay(10/ portTICK_RATE_MS);
+		counter++;
+	}
+
+	position_x = 0;
+
+
+/*
 	while(!gpio_get_level(ENDSTOPX1)){
 
 		gpio_set_level(X_DIR,X_BW);
@@ -936,7 +949,9 @@ void homingSequence(){
 	}
 
 position_x = 0;
-target_position_x=0;
+
+target_position_x=0;*/
+
 
 }
 
