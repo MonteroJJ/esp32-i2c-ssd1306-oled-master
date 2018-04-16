@@ -46,8 +46,8 @@
 
 #define POSITION_TOLERANCE 5 // 5 steps
 
-#define ENDSTOPX1 GPIO_NUM_34
-#define ENDSTOPX2 GPIO_NUM_35
+#define ENDSTOPX1 GPIO_NUM_32
+#define ENDSTOPX2 GPIO_NUM_33
 
 #define ENDSTOPY1 GPIO_NUM_34
 #define ENDSTOPY2 GPIO_NUM_35
@@ -71,11 +71,15 @@
 
 #define X_DIR GPIO_NUM_16
 #define X_STEP GPIO_NUM_18
-#define X_ENABLE GPIO_NUM_35
+#define X_ENABLE GPIO_NUM_15
 
 #define Y_DIR GPIO_NUM_16
 #define Y_STEP GPIO_NUM_18
 #define Y_ENABLE GPIO_NUM_35
+
+
+//
+#define SERVO_PIN GPIO_NUM_13
 
 // GPIO_NUM_19 and GPIO_NUM_22 are used in OLED communication
 
@@ -88,5 +92,7 @@
 #define Y_BW 0
 #define Y_FW 1
 
-#define I2C_SDA GPIO_NUM_19
+#define I2C_SDA GPIO_NUM_19 //GPIO_NUM_21
 #define I2C_SCL GPIO_NUM_22
+
+//21SDA y 22SCL

@@ -104,16 +104,16 @@ typedef struct {
 xQueueHandle timer_queue;
 
 
-//Variable para control
-int ParseMode = ABSOLUTE;
+//Variable for control
+int8_t ParseMode = ABSOLUTE;
 
+//Variable for servo status
+int8_t SERVO_ON = 0;
 
 
 /** FUNCIONES PARA EL CONTROL DE STEPPERS
  *
  */
-
-
 
 // Variable definitions
 
@@ -187,8 +187,10 @@ int parser(char *data);
 void subparser(const char *data, char** endptr);
 void homingSequence();
 
-int startServo(){return 0;};
-int stopServo(){return 0;};
+int startServo(){SERVO_ON = 1; return 0;};
+int stopServo(){SERVO_ON = 0; return 0;};
+static uint32_t servo_per_degree_init(uint32_t degree_of_rotation);
+void servo_control(void *arg);
 
 
 int16_t myAbs(int16_t param)
@@ -513,11 +515,7 @@ void setSpeedS(int target_sx, int target_sy)
   target_speed_y = target_sy;
 }
 
-/**END DE STEPPERS*/
-
-
-
-
+/**END FROM STEPPERS*/
 
 
 
@@ -768,7 +766,11 @@ void app_main() {
 	    xTaskCreate(timer_task, "timer_evt_task", 2048, NULL, 5, NULL);
 //
 	    xTaskCreate(control_loop_task, "Control_Loop", 2048, NULL, 5, NULL);
+
+	    xTaskCreate(servo_control, "Servo control", 2048, NULL, 5, NULL);
 	    printf("TEST");
+
+
 
 		com_pos_y = 1000;
 		com_pos_x = 1000;  //center X axis
@@ -785,15 +787,15 @@ void app_main() {
 
 
 
-
-
 void subparser(const char *data, char** endptr){
 	int Velx=0;
 	int Vely=0;
   int temp = 0;
+
   switch (data[0]) {
     case 'G':
      temp = strtol ((data+1), endptr,10);
+    if((data+1)==*endptr){printf("CMD ERROR"); *endptr[0]='\0'; break;}
     if(temp==1) {}
     if(temp==90) {ParseMode = ABSOLUTE;}
     if(temp==91) {ParseMode = INCREMENTAL;}
@@ -801,12 +803,14 @@ void subparser(const char *data, char** endptr){
 
     case 'M':
     	temp = strtol ((data+1), endptr,10);
+        if((data+1)==*endptr){printf("CMD ERROR"); *endptr[0]='\0'; break;}
     if(temp==3) {startServo();}
     if(temp==5) {stopServo();}
     break;
 
     case 'X':
     temp = strtol ((data+1), endptr,10);
+    if((data+1)==*endptr){printf("CMD ERROR"); *endptr[0]='\0'; break;}
     if(ParseMode== ABSOLUTE){setPosition(temp,target_position_y);}
     if(ParseMode== INCREMENTAL){setPosition(target_position_x/X_AXIS_STEPS_PER_UNIT+temp,target_position_y);}
     printf("x");
@@ -814,6 +818,7 @@ void subparser(const char *data, char** endptr){
 
     case 'Y':
     temp = strtol ((data+1), endptr,10);
+    if((data+1)==*endptr){printf("CMD ERROR"); *endptr[0]='\0'; break;}
     if(ParseMode== ABSOLUTE){setPosition(target_position_x,temp);}
     if(ParseMode== INCREMENTAL){setPosition(target_position_x,target_position_y/Y_AXIS_STEPS_PER_UNIT+temp);}
     printf("y");
@@ -822,6 +827,7 @@ void subparser(const char *data, char** endptr){
     case 'F':
     // mm/min
     temp = strtol ((data+1), endptr,10);
+    if((data+1)==*endptr){printf("CMD ERROR"); *endptr[0]='\0'; break;}
     Velx = temp*X_AXIS_STEPS_PER_UNIT/60;
     Vely = temp*Y_AXIS_STEPS_PER_UNIT/60;
     setSpeedS(Velx,Vely);
@@ -829,7 +835,7 @@ void subparser(const char *data, char** endptr){
     break;
     case 'H': homingSequence(); break;
     case 'S': break;
-    default:  break;
+    default:  printf("Unknown Command");*endptr[0]='\0';break;
 
   }
   }
@@ -857,6 +863,51 @@ ESP_LOGI("Serial"," ENDPARSE");
 return 0;
 
 }
+
+
+
+static uint32_t servo_per_degree_init(uint32_t degree_of_rotation)
+{
+    uint32_t cal_pulsewidth = 0;
+    cal_pulsewidth = (SERVO_MIN_PULSEWIDTH + (((SERVO_MAX_PULSEWIDTH - SERVO_MIN_PULSEWIDTH) * (degree_of_rotation)) / (SERVO_MAX_DEGREE)));
+    return cal_pulsewidth;
+}
+
+void servo_control(void *arg)
+{
+    uint32_t angle;
+    //1. mcpwm gpio initialization
+    mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM0A, SERVO_PIN);    //Set GPIO 16 as PWM0A, to which servo is connected
+
+    //2. initial mcpwm configuration
+    //printf("Configuring Initial Parameters of mcpwm......\n");
+    mcpwm_config_t pwm_config;
+    pwm_config.frequency = 50;    //frequency = 50Hz, i.e. for every servo motor time period should be 20ms
+    pwm_config.cmpr_a = 0;    //duty cycle of PWMxA = 0
+    pwm_config.cmpr_b = 0;    //duty cycle of PWMxb = 0
+    pwm_config.counter_mode = MCPWM_UP_COUNTER;
+    pwm_config.duty_mode = MCPWM_DUTY_MODE_0;
+    mcpwm_init(MCPWM_UNIT_0, MCPWM_TIMER_0, &pwm_config);    //Configure PWM0A & PWM0B with above settings
+    int8_t servo_Status = SERVO_ON;
+    while (1) {
+    	if(servo_Status != SERVO_ON){
+			if(SERVO_ON){
+				angle = servo_per_degree_init(90);
+				ESP_LOGI("Servo"," Servo ON");
+
+			}else{
+				angle = servo_per_degree_init(0);
+				ESP_LOGI("Servo"," Servo OFF");
+			}
+			servo_Status = SERVO_ON;
+			mcpwm_set_duty_in_us(MCPWM_UNIT_0, MCPWM_TIMER_0, MCPWM_OPR_A, angle);
+    	}
+    	vTaskDelay(10);     //Add delay, since it takes time for servo to rotate, generally 100ms/60degree rotation at 5V
+
+    }
+}
+
+
 
 
 
