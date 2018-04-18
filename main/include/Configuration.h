@@ -25,12 +25,12 @@
 // Geometric calibration.
 //According to datasheet for IGUS ZLW-1040 we get 66 mm/rev
 #define X_AXIS_STEPS_PER_UNIT 24.24   // With RPP 3M band and 1/8 microstepping on drivers
-#define Y_AXIS_STEPS_PER_UNIT 24.24    // 200*8 = 1600 steps/rev = 1600/66mm = 24.24
+#define Y_AXIS_STEPS_PER_UNIT 24.24    // 200*8 = 1600 steps/rev = 1600/66mm = 24.24 //97 (96.96) mit 32
 
 // Absolute Min and Max robot positions in mm (measured from center of robot pusher)
 #define ROBOT_MIN_X 0
 #define ROBOT_MIN_Y 0
-#define ROBOT_MAX_X 1000
+#define ROBOT_MAX_X 1850
 #define ROBOT_MAX_Y 1000
 
 // This is the center of the table. All units in milimeters

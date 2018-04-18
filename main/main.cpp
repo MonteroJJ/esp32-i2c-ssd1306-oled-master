@@ -78,7 +78,9 @@ OLED oled = OLED(I2C_SDA, I2C_SCL, SSD1306_128x64);
 
 
 uint8_t run = 0;
-
+uint8_t HOMING = 0;
+uint8_t ES1_X_STATUS = 0;
+uint8_t ES2_X_STATUS = 0;
 
 
 #define TIMER_DIVIDER         40  //  Hardware timer clock divider. we need a 2mhz clok that means a divider of 40 (main clock for timers runs at 80Mhz)
@@ -712,6 +714,30 @@ static void control_loop_task(void *pvParameters){
 		if(abs(position_x-target_position_x)!=0)
 			printf("\n %d \n",position_x);
 
+		if((!gpio_get_level(ENDSTOPX1))&&!HOMING&&!ES1_X_STATUS){
+
+			vTaskDelay(10/ portTICK_RATE_MS);
+			if((!gpio_get_level(ENDSTOPX1))&&!HOMING&&!ES1_X_STATUS){
+				printf("ENDSTOP 1 ACTIV");
+				ES1_X_STATUS = 1;
+				position_x = ROBOT_MIN_X;
+				target_position_x = ROBOT_MIN_X;
+			}
+		}
+		if(gpio_get_level(ENDSTOPX1)&&ES1_X_STATUS){ES1_X_STATUS = 0;}
+
+		if((!gpio_get_level(ENDSTOPX2))&&(!ES2_X_STATUS)&&!HOMING){
+
+			vTaskDelay(10/ portTICK_RATE_MS);
+			if(!gpio_get_level(ENDSTOPX2)&&!HOMING&&(!ES2_X_STATUS)){
+				printf("ENDSTOP 2 ACTIV");
+				position_x = ROBOT_MAX_X*X_AXIS_STEPS_PER_UNIT;
+				target_position_x = ROBOT_MAX_X*X_AXIS_STEPS_PER_UNIT;
+			}
+				}
+		if(gpio_get_level(ENDSTOPX1)&&ES2_X_STATUS){ES2_X_STATUS = 0;}
+
+
 	positionControl();
 	vTaskDelay(1/ portTICK_RATE_MS);
 	}
@@ -791,7 +817,8 @@ void subparser(const char *data, char** endptr){
 	int Velx=0;
 	int Vely=0;
   int temp = 0;
-
+  int8_t temp_ES1X = 0;
+  int8_t temp_ES2X = 0;
   switch (data[0]) {
     case 'G':
      temp = strtol ((data+1), endptr,10);
@@ -806,6 +833,10 @@ void subparser(const char *data, char** endptr){
         if((data+1)==*endptr){printf("CMD ERROR"); *endptr[0]='\0'; break;}
     if(temp==3) {startServo();}
     if(temp==5) {stopServo();}
+    if(temp==119) {
+    	temp_ES1X = gpio_get_level(ENDSTOPX1);
+    	temp_ES2X = gpio_get_level(ENDSTOPX2);
+    	printf("STATUS: \n Position: %d mm \n Speed: %d steps/sec \n ESX1: %d \n ESX2: %d \n",position_x,speed_x,temp_ES1X,temp_ES2X);}
     break;
 
     case 'X':
@@ -910,21 +941,32 @@ void servo_control(void *arg)
 
 
 
-
-
 void homingSequence(){
 
 int8_t counter =0;
 
-	while(counter<10){
+		HOMING = 1;
+		com_speed_x = 1500;
+		com_speed_y = 1500;
+		setSpeedS(com_speed_x,com_speed_y);
 
-		position_x = 10;
-		target_position_x= 0;
+
+	while(gpio_get_level(ENDSTOPX1)){
+
+		position_x = ROBOT_MIN_X*X_AXIS_STEPS_PER_UNIT+5;
+		target_position_x= ROBOT_MIN_X*X_AXIS_STEPS_PER_UNIT;
 		vTaskDelay(10/ portTICK_RATE_MS);
-		counter++;
+		//counter++;
 	}
+	while(!gpio_get_level(ENDSTOPX1)){
 
-	position_x = 0;
+			position_x = ROBOT_MIN_X*X_AXIS_STEPS_PER_UNIT;
+			target_position_x= ROBOT_MIN_X*X_AXIS_STEPS_PER_UNIT+5;
+			vTaskDelay(10/ portTICK_RATE_MS);
+			//counter++;
+		}
+	HOMING = 0;
+	position_x = (int16_t)X_AXIS_STEPS_PER_UNIT*ROBOT_MIN_X;
 
 
 /*
