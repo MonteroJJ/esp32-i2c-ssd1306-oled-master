@@ -77,7 +77,7 @@ OLED oled = OLED(I2C_SDA, I2C_SCL, SSD1306_128x64);
 #define ESP_INTR_FLAG_DEFAULT 0
 
 
-uint8_t run = 0;
+
 uint8_t HOMING = 0;
 uint8_t ES1_X_STATUS = 0;
 uint8_t ES2_X_STATUS = 0;
@@ -119,58 +119,49 @@ int8_t SERVO_ON = 0;
 
 // Variable definitions
 
-// Log and Timer variables
-extern long loop_counter;
-extern long timer_old;
-extern long timer_packet_old;
-extern long timer_value;
-extern int debug_counter;
 
 int64_t micros_old=0;
 
-// We have 2 axis => 2 motor controls 0=X axis   1=Y axis  (Y AXIS HAS 2 MOTORS Left and Right)
-extern int16_t speed_m[2];           // Actual speed of motors
-extern uint8_t dir_m[2];             // Actual direction of steppers motors
-
-extern uint16_t counter_m[2];        // counters for periods
-extern uint16_t period_m[2][8];      // Eight subperiods
-extern uint8_t period_m_index[2];    // index for subperiods
-
 // kinematic variables
 // position, speed and acceleration are in step units
-volatile int16_t position_x=0;  // This variables are modified inside the Timer interrupts
-volatile int16_t position_y=0;
+volatile int32_t position_x=0;  // This variables are modified inside the Timer interrupts
+volatile int32_t position_y=0;
 
-volatile int16_t speed_x=1;
-volatile int16_t speed_y=10;
+volatile int16_t speed_x=100;
+volatile int16_t speed_y=100;
+
 volatile int16_t max_speed_x=100;
 volatile int16_t max_speed_y=100;
 
  int8_t dir_x=1;     //(dir=1 positive, dir=-1 negative)
  int8_t dir_y=1;
- int16_t target_position_x=0;
- int16_t target_position_y=0;
+
+ int32_t target_position_x=0;
+ int32_t target_position_y=0;
+
  int16_t target_speed_x=0;
  int16_t target_speed_y=0;
+
  int16_t max_acceleration_x = MAX_ACCEL_X;  // default maximun acceleration
  int16_t max_acceleration_y = MAX_ACCEL_Y;
+
  int16_t acceleration_x = MAX_ACCEL_X;
  int16_t acceleration_y = MAX_ACCEL_Y;
+
  int16_t accel_ramp = ACCEL_RAMP_MIN;
 
- int16_t pos_stop_x;
- int16_t pos_stop_y;
+ int32_t pos_stop_x;
+ int32_t pos_stop_y;
 
  uint16_t com_pos_x;
  uint16_t com_pos_y;
+
  uint16_t com_speed_x;
  uint16_t com_speed_y;
+
  uint16_t target_x_mm;
  uint16_t target_y_mm;
- int16_t user_speed_x;
- int16_t user_speed_y;
- int16_t filt_user_speed_x;
- int16_t filt_user_speed_y;
+
 
 
 int16_t myAbs(int16_t param);
@@ -623,7 +614,7 @@ static void timer_task(void *arg)
          if (dir_x==0)
          return;
 
-                  //SET(PORTF,0); // STEP X-AXIS
+
                   gpio_set_level(X_STEP,1);
                   position_x += dir_x;
                  // ESP_LOGI("TEST","TEST");
@@ -698,7 +689,7 @@ static void serial_input_task(void *pvParameters){
         if (len > 0) {
         	data[len]='\0';
        // data[len+1]='\0';
-        	printf("newdata");
+        	printf("NewData");
         	 parser((char *)data);
                 }
         vTaskDelay(10/ portTICK_RATE_MS);
@@ -712,11 +703,20 @@ static void control_loop_task(void *pvParameters){
 	while(1){
 	//ESP_LOGI("ControlLoop"," Executed Cada mSeg");
 		if(abs(position_x-target_position_x)!=0)
+			{
 			printf("\n %d \n",position_x);
+			RUNNING = 1;
+			Ready=0;
+			}else{RUNNING =0;}
+
+		if(!RUNNING&&!Ready){
+			printf("Ready For Command: ");
+			Ready = 1;
+		}
 
 		if((!gpio_get_level(ENDSTOPX1))&&!HOMING&&!ES1_X_STATUS){
 
-			vTaskDelay(10/ portTICK_RATE_MS);
+			vTaskDelay(10/ portTICK_RATE_MS); // SOFTWARE DEBOUNCE
 			if((!gpio_get_level(ENDSTOPX1))&&!HOMING&&!ES1_X_STATUS){
 				printf("ENDSTOP 1 ACTIV");
 				ES1_X_STATUS = 1;
@@ -724,7 +724,10 @@ static void control_loop_task(void *pvParameters){
 				target_position_x = ROBOT_MIN_X;
 			}
 		}
-		if(gpio_get_level(ENDSTOPX1)&&ES1_X_STATUS){ES1_X_STATUS = 0;}
+		if(gpio_get_level(ENDSTOPX1)&&ES1_X_STATUS){
+			vTaskDelay(10/ portTICK_RATE_MS); // SOFTWARE DEBOUNCE
+			if(gpio_get_level(ENDSTOPX1)&&ES1_X_STATUS){
+			ES1_X_STATUS = 0;}}
 
 		if((!gpio_get_level(ENDSTOPX2))&&(!ES2_X_STATUS)&&!HOMING){
 
@@ -735,7 +738,10 @@ static void control_loop_task(void *pvParameters){
 				target_position_x = ROBOT_MAX_X*X_AXIS_STEPS_PER_UNIT;
 			}
 				}
-		if(gpio_get_level(ENDSTOPX1)&&ES2_X_STATUS){ES2_X_STATUS = 0;}
+		if(gpio_get_level(ENDSTOPX1)&&ES2_X_STATUS){
+			vTaskDelay(10/ portTICK_RATE_MS); // SOFTWARE DEBOUNCE
+			if(gpio_get_level(ENDSTOPX1)&&ES2_X_STATUS){
+			ES2_X_STATUS = 0;}}
 
 
 	positionControl();
@@ -752,7 +758,7 @@ void app_main() {
 
 
 	initSerial0();
-	// CONFIGURE INTERRUPTS ON PIN 5 TO RISING EDGE
+	// CONFIGURE INTERRUPTS
 	gpio_config_t io_conf;
 
 	io_conf.intr_type = GPIO_INTR_DISABLE;
@@ -796,15 +802,10 @@ void app_main() {
 	    xTaskCreate(servo_control, "Servo_control", 2048, NULL, 5, NULL);
 	    printf("TEST");
 
-
-
-		com_pos_y = 1000;
-		com_pos_x = 1000;  //center X axis
 		com_speed_x = 1500;
 		com_speed_y = 1500;
 	    setSpeedS(com_speed_x,com_speed_y);
-	 //   setPosition_mm10(com_pos_x,com_pos_y);
-	    //setPosition(com_pos_x,com_pos_y);
+
 
 }
 #ifdef __cplusplus
@@ -882,7 +883,7 @@ int parser(char *data)
 
 char* pEnd;
 pEnd=data;
-ESP_LOGI("Serial"," TEST");
+//ESP_LOGI("Serial"," TEST");
 //printf("StartParse");
 ESP_LOGI("Serial"," STARTPARSE");
 while((pEnd[0]!=32)&&(pEnd[0]!='\0')&&(pEnd[0]!=13)){
@@ -943,7 +944,7 @@ void servo_control(void *arg)
 
 void homingSequence(){
 
-int8_t counter =0;
+		int8_t counter =0;
 
 		HOMING = 1;
 		com_speed_x = 1500;
@@ -955,44 +956,19 @@ int8_t counter =0;
 
 		position_x = ROBOT_MIN_X*X_AXIS_STEPS_PER_UNIT+5;
 		target_position_x= ROBOT_MIN_X*X_AXIS_STEPS_PER_UNIT;
-		vTaskDelay(10/ portTICK_RATE_MS);
+		vTaskDelay(1/ portTICK_RATE_MS);
 		//counter++;
 	}
 	while(!gpio_get_level(ENDSTOPX1)){
 
 			position_x = ROBOT_MIN_X*X_AXIS_STEPS_PER_UNIT;
 			target_position_x= ROBOT_MIN_X*X_AXIS_STEPS_PER_UNIT+5;
-			vTaskDelay(10/ portTICK_RATE_MS);
+			vTaskDelay(1/ portTICK_RATE_MS);
 			//counter++;
 		}
 	HOMING = 0;
-	position_x = (int16_t)X_AXIS_STEPS_PER_UNIT*ROBOT_MIN_X;
-
-
-/*
-	while(!gpio_get_level(ENDSTOPX1)){
-
-		gpio_set_level(X_DIR,X_BW);
-		gpio_set_level(X_STEP,1);
-		vTaskDelay(10/ portTICK_RATE_MS);
-		gpio_set_level(X_STEP,0);
-		vTaskDelay(10/ portTICK_RATE_MS);
-
-
-	}
-
-	while(gpio_get_level(ENDSTOPX1)){
-		gpio_set_level(X_DIR,X_FW);
-		gpio_set_level(X_STEP,1);
-		vTaskDelay(10/ portTICK_RATE_MS);
-		gpio_set_level(X_STEP,0);
-		vTaskDelay(10/ portTICK_RATE_MS);
-
-	}
-
-position_x = 0;
-
-target_position_x=0;*/
+	position_x = X_AXIS_STEPS_PER_UNIT*ROBOT_MIN_X;
+	target_position_x = _AXIS_STEPS_PER_UNIT*ROBOT_MIN_X;
 
 
 }
